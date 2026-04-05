@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Guided Builder IDE-lite</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      display: flex;
+      height: 100vh;
+    }
+
+    #left {
+      width: 40%;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #ccc;
+    }
+
+    #right {
+      width: 60%;
+      padding: 10px;
+    }
+
+    .section {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      overflow-y: auto;
+    }
+
+    #chatSection { height: 30%; }
+    #structureSection { height: 20%; }
+    #filesSection { height: 10%; }
+    #codeSection { height: 40%; }
+
+    textarea {
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    button {
+      margin-top: 5px;
+      padding: 6px;
+      cursor: pointer;
+    }
+
+    #chatLog {
+      height: 120px;
+      overflow-y: auto;
+      background: #eee;
+      padding: 5px;
+      margin-bottom: 5px;
+    }
+
+    iframe {
+      width: 100%;
+      height: 90%;
+      border: 1px solid black;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- LEFT PANEL -->
+<div id="left">
+
+  <!-- CHAT -->
+  <div id="chatSection" class="section">
+    <h3>💬 AI Chat</h3>
+
+    <div id="chatLog"></div>
+
+    <textarea id="chatInput" placeholder="Describe your app..."></textarea>
+    <button onclick="processChat()">Send</button>
+  </div>
+
+  <!-- STRUCTURE -->
+  <div id="structureSection" class="section">
+    <h3>📁 Structure</h3>
+    <textarea id="structure"></textarea>
+    <button onclick="applyStructure()">Apply</button>
+  </div>
+
+  <!-- FILES -->
+  <div id="filesSection" class="section">
+    <h3>📂 Files</h3>
+    <div id="fileTabs"></div>
+  </div>
+
+  <!-- CODE -->
+  <div id="codeSection" class="section">
+    <h3>💻 Code</h3>
+    <textarea id="code" style="height:150px;"></textarea>
+    <button onclick="applyCode()">Apply</button>
+  </div>
+
+</div>
+
+<!-- RIGHT PANEL -->
+<div id="right">
+  <h2>👀 Live Preview</h2>
+  <iframe id="preview"></iframe>
+</div>
+
+<script>
+
+// ===== STATE =====
+let step = 0;
+let currentPrompt = "";
+let currentFile = "";
+let files = {};
+
+// ===== CHAT SYSTEM =====
+function processChat() {
+  const input = document.getElementById("chatInput").value;
+  const log = document.getElementById("chatLog");
+
+  log.innerHTML += `<div><b>You:</b> ${input}</div>`;
+
+  let response = "";
+  let structure = "";
+
+  if (input.toLowerCase().includes("music")) {
+    response = "This app handles audio processing.";
+    structure = `index.html\nstyle.css\nscript.js\naudio.js`;
+  }
+
+  else if (input.toLowerCase().includes("code")) {
+    response = "This app generates code dynamically.";
+    structure = `index.html\nstyle.css\nscript.js\ngenerator.js`;
+  }
+
+  else {
+    response = "Basic app structure created.";
+    structure = `index.html\nstyle.css\nscript.js`;
+  }
+
+  log.innerHTML += `<div><b>AI:</b> ${response}</div>`;
+  log.scrollTop = log.scrollHeight;
+
+  document.getElementById("structure").value = structure;
+}
+
+// ===== FILE SYSTEM =====
+function renderTabs() {
+  const container = document.getElementById("fileTabs");
+  container.innerHTML = "";
+
+  for (let file in files) {
+    const btn = document.createElement("button");
+    btn.innerText = file;
+
+    btn.onclick = () => {
+      saveCurrentFile();
+      currentFile = file;
+      loadCurrentFile();
+    };
+
+    container.appendChild(btn);
+  }
+}
+
+function saveCurrentFile() {
+  if (currentFile) {
+    files[currentFile] = document.getElementById("code").value;
+  }
+}
+
+function loadCurrentFile() {
+  document.getElementById("code").value = files[currentFile] || "";
+}
+
+// ===== STRUCTURE =====
+function applyStructure() {
+  const structureText = document.getElementById("structure").value;
+
+  files = {};
+  const lines = structureText.split("\n");
+
+  lines.forEach(line => {
+    const file = line.trim();
+    if (file) files[file] = "";
+  });
+
+  renderTabs();
+
+  currentFile = Object.keys(files)[0] || "";
+  loadCurrentFile();
+}
+
+// ===== APPLY =====
+function applyCode() {
+  saveCurrentFile();
+
+  let html = "";
+  let css = "";
+  let js = "";
+
+  for (let file in files) {
+    if (file.endsWith(".html")) html += files[file];
+    else if (file.endsWith(".css")) css += files[file];
+    else if (file.endsWith(".js")) js += files[file];
+  }
+
+  const fullCode = `
+    <style>${css}</style>
+    ${html}
+    <script>${js}<\/script>
+  `;
+
+  document.getElementById("preview").srcdoc = fullCode;
+}
+
+// ===== INIT =====
+renderTabs();
+
+</script>
+
+</body>
+</html>
