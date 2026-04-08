@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from ai.step_generator import generate_steps
+from step_generator import generate_steps
 
 app = FastAPI()
 
