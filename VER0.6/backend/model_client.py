@@ -1,28 +1,36 @@
+# backend/model_client.py
+
 import requests
+import os
 
-API_URL = "https://unsetting-chelsea-unturbidly.ngrok-free.dev/generate"
+# Allow environment-based configuration
+API_URL = os.getenv(
+    "MODEL_API_URL",
+    "https://unsetting-chelsea-unturbidly.ngrok-free.dev/generate"
+)
 
-def call_model(prompt):
+def call_model(prompt, timeout=120):
     try:
         response = requests.post(
             API_URL,
             json={"prompt": prompt},
-            timeout=120
+            timeout=timeout
         )
 
-        # Checks status
-        if response.status_code != 200:
-            print("❌ API Error:", response.status_code)
+        response.raise_for_status()
+        data = response.json()
+
+        if "response" not in data:
+            print("❌ Unexpected API response:", data)
             return ""
 
-        # Safe JSON parse
-        try:
-            return response.json().get("response", "")
-        except:
-            print("❌ Invalid JSON from API")
-            print(response.text)
-            return ""
+        return data["response"]
 
+    except requests.exceptions.Timeout:
+        print("❌ Request timed out.")
     except requests.exceptions.RequestException as e:
         print("❌ Request failed:", e)
-        return ""
+    except ValueError:
+        print("❌ Invalid JSON response:", response.text)
+
+    return ""

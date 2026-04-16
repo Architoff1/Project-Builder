@@ -2,11 +2,8 @@
 <html>
 <head>
   <title>Guided Builder</title>
-
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -50,6 +47,7 @@
       border: 1px solid #ccc;
       padding: 6px;
       resize: none;
+      font-size: 12px;
     }
 
     button {
@@ -62,15 +60,9 @@
       font-size: 12px;
     }
 
-    button:hover {
-      background: #1e4fd1;
-    }
+    button:hover { background: #1e4fd1; }
 
-    .btn-row {
-      display: flex;
-      gap: 5px;
-      margin-top: 5px;
-    }
+    .btn-row { display: flex; gap: 5px; margin-top: 5px; }
 
     #chatLog {
       height: 140px;
@@ -104,6 +96,7 @@
       padding: 6px;
       border-radius: 6px;
       margin-top: 5px;
+      min-height: 40px;
     }
 
     iframe {
@@ -113,55 +106,47 @@
       border: 1px solid #ccc;
       background: white;
     }
-
-    /* HEIGHT CONTROL */
-    #chatInput { height: 60px;}
-    #chatCard { height: 28%; }
-    #structureCard { height: 16%; }
-    #controlCard { height: 10%; }
-    #filesCard { height: 10%; }
-    #codeCard { height:36%; }
   </style>
 </head>
 
 <body>
 
-<!-- LEFT PANEL -->
 <div id="left">
 
   <!-- CHAT -->
-  <div class="card" id="chatCard">
+  <div class="card">
     <h3>💬 Chat</h3>
     <div id="chatLog"></div>
-    <textarea id="chatInput" placeholder="Describe your app..."></textarea>
+    <textarea id="chatInput" placeholder="Describe your app or project goal..."></textarea>
     <button onclick="processChat()">Send</button>
   </div>
 
   <!-- STRUCTURE -->
-  <div class="card" id="structureCard">
+  <div class="card">
     <h3>📁 Structure</h3>
     <textarea id="structure"></textarea>
     <button onclick="applyStructure()">Apply</button>
   </div>
 
   <!-- CONTROLS -->
-  <div class="card" id="controlCard">
+  <div class="card">
     <h3>⚙️ Controls</h3>
     <div class="btn-row">
       <button onclick="generateStep()">⚡ Generate</button>
       <button onclick="resetBuilder()" style="background:#ef4444;">Reset</button>
+      <button onclick="resetChat()" style="background:#f59e0b;">Chat Reset</button>
     </div>
-    <div id="explanation">Waiting...</div>
+    <div id="explanation">Waiting for input...</div>
   </div>
 
   <!-- FILES -->
-  <div class="card" id="filesCard">
+  <div class="card">
     <h3>📂 Files</h3>
     <div id="fileTabs"></div>
   </div>
 
   <!-- CODE -->
-  <div class="card" id="codeCard">
+  <div class="card">
     <h3>💻 Code</h3>
     <textarea id="code" style="height:100%;"></textarea>
     <button onclick="applyCode()">Apply</button>
@@ -169,41 +154,102 @@
 
 </div>
 
-<!-- RIGHT PANEL -->
 <div id="right">
-  <iframe id="preview"></iframe>
+  <iframe id="preview" sandbox="allow-scripts allow-same-origin"></iframe>
 </div>
 
 <script>
+const API_URL = "http://127.0.0.1:8000/generate-steps";
+const RESET_CHAT_URL = "http://127.0.0.1:8000/reset-chat";
 
-// ===== STATE =====
 let step = 0;
 let currentFile = "";
 let files = {};
+let generatedSteps = [];
 
-// ===== CHAT =====
-function processChat() {
-  const input = document.getElementById("chatInput").value;
-  const log = document.getElementById("chatLog");
-
-  log.innerHTML += `<div><b>You:</b> ${input}</div>`;
-
-  let structure = `index.html\nstyle.css\nscript.js`;
-
-  if (input.toLowerCase().includes("music")) {
-    structure += `\naudio.js`;
-  }
-
-  log.innerHTML += `<div><b>AI:</b> Structure ready → Apply next</div>`;
-  log.scrollTop = log.scrollHeight;
-
-  document.getElementById("structure").value = structure;
-
-  // UX FIX
-  document.getElementById("chatInput").value = "";
+// ===============================
+// Validate filenames from model
+// ===============================
+function isValidFileName(name) {
+  const validExtensions = [
+    ".html", ".css", ".js", ".py",
+    ".java", ".json", ".txt", ".md",
+    ".ts", ".jsx", ".tsx", ".yml", ".yaml"
+  ];
+  if (!name || typeof name !== "string") return false;
+  if (/[<>:"|?*]/.test(name)) return false;
+  return validExtensions.some(ext => name.toLowerCase().endsWith(ext));
 }
 
-// ===== FILE SYSTEM =====
+// ===============================
+// CHAT WITH BACKEND
+// ===============================
+async function processChat() {
+  const inputEl = document.getElementById("chatInput");
+  const input = inputEl.value.trim();
+  if (!input) return;
+
+  const log = document.getElementById("chatLog");
+  const explanation = document.getElementById("explanation");
+
+  log.innerHTML += `<div><b>You:</b> ${input}</div>`;
+  explanation.innerText = "⏳ Generating steps...";
+  log.scrollTop = log.scrollHeight;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: input })
+    });
+
+    const data = await response.json();
+    generatedSteps = data.steps || [];
+
+    log.innerHTML += `<div><b>AI:</b> Generated ${generatedSteps.length} steps.</div>`;
+
+    // Create dynamic structure from outputs
+    const fileSet = new Set();
+    generatedSteps.forEach(step => {
+      if (Array.isArray(step.outputs)) {
+        step.outputs.forEach(file => {
+          if (isValidFileName(file)) {
+            fileSet.add(file);
+          }
+        });
+      }
+    });
+
+    // Fallback if no valid filenames
+    if (fileSet.size === 0) {
+      fileSet.add("main.py");
+    }
+
+    document.getElementById("structure").value =
+      Array.from(fileSet).join("\n");
+
+    explanation.innerText = "✅ Steps generated. Apply structure.";
+    inputEl.value = "";
+
+  } catch (error) {
+    explanation.innerText = "❌ Error generating steps.";
+    log.innerHTML += `<div style="color:red;"><b>Error:</b> ${error.message}</div>`;
+  }
+}
+
+// ===============================
+// CHAT RESET
+// ===============================
+async function resetChat() {
+  await fetch(RESET_CHAT_URL, { method: "POST" });
+  document.getElementById("chatLog").innerHTML = "";
+  document.getElementById("chatInput").value = "";
+  document.getElementById("explanation").innerText = "💬 Chat reset.";
+}
+
+// ===============================
+// FILE MANAGEMENT
+// ===============================
 function renderTabs() {
   const container = document.getElementById("fileTabs");
   container.innerHTML = "";
@@ -211,7 +257,6 @@ function renderTabs() {
   for (let file in files) {
     const btn = document.createElement("button");
     btn.innerText = file;
-
     if (file === currentFile) btn.classList.add("active");
 
     btn.onclick = () => {
@@ -225,24 +270,15 @@ function renderTabs() {
   }
 }
 
-function saveCurrentFile() {
-  if (currentFile) {
-    files[currentFile] = document.getElementById("code").value;
-  }
-}
-
-function loadCurrentFile() {
-  document.getElementById("code").value = files[currentFile] || "";
-}
-
-// ===== STRUCTURE =====
 function applyStructure() {
   const lines = document.getElementById("structure").value.split("\n");
 
   files = {};
   lines.forEach(line => {
     const f = line.trim();
-    if (f) files[f] = "";
+    if (isValidFileName(f)) {
+      files[f] = "";
+    }
   });
 
   step = 0;
@@ -250,91 +286,183 @@ function applyStructure() {
 
   renderTabs();
   loadCurrentFile();
-
+  updatePreviewAvailability();
   document.getElementById("explanation").innerText =
-    "Structure applied.";
+    "📁 Structure applied. Click Generate to create files.";
 }
 
-// ===== GENERATION =====
+function saveCurrentFile() {
+  if (currentFile)
+    files[currentFile] = document.getElementById("code").value;
+}
+
+function loadCurrentFile() {
+  document.getElementById("code").value = files[currentFile] || "";
+}
+
+// ===============================
+// STEP GENERATION
+// ===============================
 function generateStep() {
-
   const fileNames = Object.keys(files);
-
   if (fileNames.length === 0) {
     alert("Apply structure first");
     return;
   }
 
   if (step >= fileNames.length) {
-    document.getElementById("explanation").innerText = "Build complete.";
+    document.getElementById("explanation").innerText = "✅ Build complete.";
     return;
   }
 
   currentFile = fileNames[step];
+  const stepData = generatedSteps[step];
 
-  document.getElementById("explanation").innerText =
-    "Generating: " + currentFile;
-
+  // Generate basic boilerplate based on extension
   if (currentFile.endsWith(".html")) {
-    files[currentFile] = `<h2>App UI</h2><div id="app"></div>`;
-  }
+    files[currentFile] =
+`<!DOCTYPE html>
+<html>
+<head>
+  <title>My App</title>
+</head>
+<body>
+  <h1>My Application</h1>
+</body>
+</html>`;
+  } else if (currentFile.endsWith(".css")) {
+    files[currentFile] =
+`body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  margin-top: 50px;
+}`;
+  } else if (currentFile.endsWith(".js")) {
+    files[currentFile] = `console.log("Application loaded successfully.");`;
+  } else if (currentFile.endsWith(".py")) {
+    files[currentFile] =
+`def main():
+    print("Application running")
 
-  else if (currentFile.endsWith(".css")) {
-    files[currentFile] = `body { font-family: Arial; text-align:center; }`;
-  }
-
-  else if (currentFile.endsWith(".js")) {
-    files[currentFile] = `document.getElementById("app").innerText = "App Loaded";`;
-  }
-
-  else {
-    files[currentFile] = `// Code for ${currentFile}`;
+if __name__ == "__main__":
+    main()`;
+  } else {
+    files[currentFile] =
+`# ${stepData?.title || "Generated File"}
+# ${stepData?.description || "Auto-generated module"}`;
   }
 
   step++;
-
   loadCurrentFile();
   renderTabs();
-
-  // AUTO PREVIEW
-  applyCode();
+  updatePreviewAvailability();
 }
 
-// ===== APPLY =====
+// ===============================
+// PREVIEW HANDLING
+// ===============================
+function updatePreviewAvailability() {
+  const fileNames = Object.keys(files);
+  const hasHTML = fileNames.some(f => f.endsWith(".html"));
+
+  if (hasHTML) {
+    applyCode();
+  } else {
+    document.getElementById("preview").srcdoc = `
+      <div style="padding:20px;font-family:sans-serif;">
+        <h2>⚠️ Preview Not Available</h2>
+        <p>This project type cannot be executed directly in the browser.</p>
+        <p>You can still run the generated code locally.</p>
+      </div>`;
+  }
+}
+
 function applyCode() {
+  // Ensure latest edits are saved
   saveCurrentFile();
 
-  let html="", css="", js="";
+  let html = "";
+  let css = "";
+  let js = "";
 
+  // Collect file contents
   for (let f in files) {
     if (f.endsWith(".html")) html += files[f];
-    else if (f.endsWith(".css")) css += files[f];
-    else if (f.endsWith(".js")) js += files[f];
+    if (f.endsWith(".css")) css += files[f];
+    if (f.endsWith(".js")) js += files[f];
   }
 
-  document.getElementById("preview").srcdoc =
-    `<style>${css}</style>${html}<script>${js}<\/script>`;
+  const previewFrame = document.getElementById("preview");
+
+  // If no HTML file exists, show fallback message
+  if (!html.trim()) {
+    previewFrame.srcdoc = `
+      <div style="padding:20px;font-family:sans-serif;">
+        <h2>⚠️ Preview Not Available</h2>
+        <p>This project type cannot be executed directly in the browser.</p>
+        <p>You can still run the generated code locally.</p>
+      </div>`;
+    return;
+  }
+
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) {
+    html = bodyMatch[1];
+  }
+  
+  // Remove any <script> tags from HTML to prevent conflicts
+  html = html.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");
+
+  // Build clean HTML document (HTML + CSS only)
+  const fullDocument = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>${css}</style>
+      </head>
+      <body>
+        ${html}
+      </body>
+    </html>
+  `;
+
+  // Load HTML and CSS into iframe
+  previewFrame.srcdoc = fullDocument;
+
+  // Inject JavaScript safely after iframe loads
+  previewFrame.onload = () => {
+    try {
+      const doc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+      if (js.trim()) {
+        const script = doc.createElement("script");
+        script.textContent = js;
+        doc.body.appendChild(script);
+      }
+    } catch (e) {
+      console.error("Preview JS injection error:", e);
+    }
+  };
 }
 
-// ===== RESET =====
+// ===============================
+// FULL RESET
+// ===============================
 function resetBuilder() {
   step = 0;
   currentFile = "";
   files = {};
+  generatedSteps = [];
 
   document.getElementById("chatLog").innerHTML = "";
   document.getElementById("chatInput").value = "";
   document.getElementById("structure").value = "";
   document.getElementById("code").value = "";
   document.getElementById("preview").srcdoc = "";
-  document.getElementById("explanation").innerText = "Reset done.";
+  document.getElementById("explanation").innerText = "🔄 Reset complete.";
 
   renderTabs();
 }
-
-// INIT
-renderTabs();
-
 </script>
 
 </body>
